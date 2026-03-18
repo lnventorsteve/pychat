@@ -6,7 +6,7 @@ import time
 
 import pyperclip
 import pygame
-
+from pygments import highlight
 
 pygame.init()
 default_font = pygame.font.SysFont(pygame.font.get_default_font(), 24)
@@ -716,9 +716,9 @@ class RoundBox:
         pygame.draw.rect(self.display, self.bgcolor, ((self.x - self.x2 / 2) + border,(self.y - self.y2 / 2) + radius, self.x2 - border * 2, self.y2 -  radius * 2))
 
 class Text:
-    def __init__(self, layer, pos, text, in_box=False, radius=5, size=(0, 0), text_color=False
-                 , border_color=False, background_color=False, center="center"
-                 , cut_dir=False, resize=False):
+    def __init__(self, layer, pos, text, in_box=False, radius=False, size=(0, 0), text_color=False,
+                 border_color=False, background_color=False, center="center",
+                 cut_dir=False, resize=False,padding=False):
         self.render_window = layer
         self.renderer = layer.renderer
         self.theme = theme = layer.theme
@@ -727,6 +727,8 @@ class Text:
         self.resize = resize
         self.display, self.screen, self.scale = theme.screen_info()
         self.tcolor, self.bcolor, self.bgcolor = theme.colors()[:-1]
+        self.radius = self.theme.radius
+        self.padding = theme.border + theme.scale*2
         self.font = theme.fonts()
         self.center = center
         self.cut_dir = cut_dir
@@ -738,6 +740,11 @@ class Text:
             self.bcolor = border_color
         if background_color:
             self.bgcolor = background_color
+        if padding:
+            self.padding = padding
+        if radius:
+            self.radius = radius
+
         self.size = size
         sx, sy = self.screen
         x, y = self.pos
@@ -745,22 +752,32 @@ class Text:
         self.init_pos = (self.x, self.y)
         tx, ty = self.font.size(str(text))
 
+
         if in_box:
-            if self.theme.radius != 0:
-                self.box = RoundBox(self.render_window, self.pos, size, radius, self.bcolor, self.bgcolor, resize=self.resize)
+            print(self.radius)
+            if self.radius != 0:
+                self.box = RoundBox(self.render_window, self.pos, self.size, self.radius, self.bcolor, self.bgcolor, resize=self.resize)
             else:
-                self.box = Box(self.render_window, self.pos, size, self.bcolor, self.bgcolor, resize=self.resize)
-            while tx > size[0] * self.scale:
+                self.box = Box(self.render_window, self.pos, self.size, self.bcolor, self.bgcolor, resize=self.resize)
+            while tx > size[0] * self.scale-self.padding*2:
                 if cut_dir:
                     text = text[1:]
                 else:
                     text = text[:-1]
                 tx = self.font.size(str(text))[0]
 
+
+
         self.text = text
         self.text_pos = (tx, ty)
         self.tx, self.ty = tx, ty
         self.text_text = self.font.render(str(text), True, self.tcolor)
+        self.textStartPos = get_center(self.center, self.scale,
+                   (self.x - self.tx / 2 + self.padding, self.y - self.ty / 2),
+                   self.tx, self.ty, self.size)
+        self.textEndPos = (self.textStartPos[0]+self.font.size(self.text)[0],self.textStartPos[1]+self.font.size(self.text)[1])
+
+
         self.render_window.add_element(self)
 
 
@@ -778,11 +795,12 @@ class Text:
         self.x, self.y = (self.init_pos[0] * scale[0] + window.pos[0] * self.scale,
                           self.init_pos[1] * scale[1] + window.pos[1] * self.scale)
 
+
     def change_text(self,text):
         tx, ty = self.font.size(str(text))
 
         if self.in_box:
-            while tx > self.size[0] * self.scale:
+            while tx > self.size[0] * self.scale-self.padding*2:
                 if self.cut_dir:
                     text = text[1:]
                 else:
@@ -794,18 +812,23 @@ class Text:
         self.tx, self.ty = tx, ty
         self.text_text = self.font.render(str(text), True, self.tcolor)
 
-    def render(self):
+    def render(self, func = None):
         if self.in_box:
             self.box.render()
+        self.textStartPos = get_center(self.center, self.scale,
+                   (self.x - self.tx / 2 + self.padding, self.y - self.ty / 2),
+                   self.tx, self.ty, self.size)
+        self.textEndPos = (self.textStartPos[0]+self.font.size(self.text)[0],self.textStartPos[1]+self.font.size(self.text)[1])
 
-        self.display.blit(self.text_text,
-                          get_center(self.center, self.scale,
-                                     (self.x - self.tx / 2, self.y - self.ty / 2),
-                                     self.tx,self.ty, self.size))
+        if func is not None:
+            func()
+
+        self.display.blit(self.text_text,self.textStartPos)
+
 
 class TextBox:
-    def __init__(self, render_window ,Input, pos, size, text, text_center="center", center="center", in_box=True, default_text="",
-                 resizeable=False, window=None, radius=False):
+    def __init__(self, render_window ,Input, pos, size, text, text_center="center", center="center",
+                 in_box=True, default_text="", resizeable=False, maxTextLength=False, window=None, radius=False, padding=False):
         self.render_window = render_window
         self.Input = Input
         self.renderer = render_window.renderer
@@ -825,20 +848,28 @@ class TextBox:
             self.pos = pos
         self.size = size
         self.font = theme.fonts()
-        self.pointer = 0
+        self.pointer = len(text)
+        self.highLightStart = 0
+        self.highLightEnd = 0
+        self.highLighting = False
+        self.highLightedText = ""
         self.in_box = in_box
         self.radius = radius
         self.center = center
         self.text_center = text_center
         self.resizeable = resizeable
+        self.maxTextLength = maxTextLength
         self.window = window
+        self.padding = theme.border + theme.scale*2
+        if padding:
+            self.padding = padding
         self.isActive = False
         self.cursor = ((0, 0), (0, 0))
         self.guiText = Text(self.render_window, pos, text, self.in_box, radius=self.radius,
-             size=self.size, background_color=self.bgcolor)
+             size=self.size, background_color=self.bgcolor,center=self.text_center,padding=self.padding)
         self.render_window.add_element(self)
 
-    def update(self, maxTextLength=False):
+    def update(self):
         if self.window is not None:
             self.pos = self.window.pos[0] + self.start_pos[0], self.window.pos[1] + self.start_pos[1]
 
@@ -849,7 +880,6 @@ class TextBox:
         size_x, size_y = self.size
         x2, y2 = size_x * self.scale, size_y * self.scale
         mx, my, mb = self.Input.mouse()
-        centerX, centerY = get_center(self.center, self.scale, self.pos, size=self.size)
         mods = self.Input.mods
         bgcolor = self.bgcolor
         if x - x2 / 2 < mx < x + x2 / 2 and y - y2 / 2 < my < y + y2 / 2:
@@ -868,14 +898,13 @@ class TextBox:
                 b -= 16
             bgcolor = r, g, b
             if mb == 1:
-                self.Input.clicked()
                 if self.text == self.default_text:
                     self.text = ""
                 if sound != False:
                     pygame.mixer.Sound.play(sound)
                 self.in_text = True
         else:
-            if mb != 0:
+            if mb == 0:
                 self.in_text = False
                 if self.text == "":
                     self.text = self.default_text
@@ -883,26 +912,27 @@ class TextBox:
         if self.in_text:
             # split text at cursor
             if self.pointer == 0:
-                text1 = self.text
-                text2 = ""
+                text1 = ""
+                text2 = self.text
             else:
-                text1 = self.text[:-self.pointer]
-                text2 = self.text[-self.pointer:]
+                text1 = self.text[:self.pointer]
+                text2 = self.text[self.pointer:]
             for key in self.Input.keys:
                 # backsapce
                 if key == 8:
                     text1 = text1[:-1]
                     self.text = text1 + text2
-                    max = len(self.text)
-                    if self.pointer > max:
-                        self.pointer = max
+                    if self.pointer > 0:
+                        self.pointer -= 1
+
                     # print(self.pointer)
                 # delete
                 elif key == 127:
                     text2 = text2[1:]
                     self.text = text1 + text2
-                    if self.pointer > 0:
-                        self.pointer -= 1
+                    max = len(self.text)
+                    if self.pointer > max:
+                        self.pointer = max
                     # print(self.pointer)
                 # enter
                 elif key == 13 or key == 27:
@@ -912,15 +942,16 @@ class TextBox:
 
                 # left arrow
                 elif key == 1073741904:
+                    if self.pointer > 0:
+                        self.pointer -= 1
+
+                    # print(self.pointer)
+                # right arrow
+                elif key == 1073741903:
                     max = len(self.text)
                     self.pointer += 1
                     if self.pointer > max:
                         self.pointer = max
-                    # print(self.pointer)
-                # right arrow
-                elif key == 1073741903:
-                    if self.pointer > 0:
-                        self.pointer -= 1
                     # print(self.pointer)
                 # ctrl-v
                 elif key == 118 and "CTRL" in mods:
@@ -944,46 +975,79 @@ class TextBox:
                 else:
                     for key in self.Input.unicode:
                         textX, textY = self.font.size(self.text)
-                        if maxTextLength != False:
-                            if textX + 20 < maxTextLength:
+                        if self.maxTextLength != False:
+                            if textX + 20 < self.maxTextLength-self.padding*2:
                                 text1 = text1 + key
                                 textX, textY = self.font.size(text1 + text2)
-                                if textX + 10 > maxTextLength:
+                                if textX + 10 > self.maxTextLength:
                                     text1 = text1[:-1]
                                 self.text = text1 + text2
                         else:
                             self.text = text1 + key + text2
+                        self.pointer+=1
 
             _text = self.text
             textX, textY = self.font.size(_text)
             textOffset = self.font.size(self.text[:-len(_text)])
             self.guiText.pos = self.pos
-            print(self.text)
             self.guiText.change_text(self.text)
 
+            t1x, t1y = self.font.size(text1)
+            t1x -= (textX + textOffset[0]) / 2 + textOffset[0] / 2
+            if t1x > (self.size[0] * self.scale) / 2 - self.theme.border * self.scale:
+                t1x = (self.size[0] * self.scale) / 2 - self.theme.border * self.scale
+
+            t1x = self.guiText.textStartPos[0]+self.font.size(text1)[0]
+
+            self.cursor = ((t1x, y + t1y / 2.5), (t1x, y - t1y / 2.5))
+
+            # set pointer on mouse click
+            if x - x2 / 2 < mx < x + x2 / 2 and y - y2 / 2 < my < y + y2 / 2 and mb == 1:
+                self.Input.clicked()
+                index = 0
+                _text = self.text + " "
+                startx = self.guiText.textStartPos[0]
+                if len(self.text) != 0:
+                    while index < len(_text):
+                        tx = self.font.size(_text[:index])[0]
+                        charRound = self.font.size(_text[index])[0]/2
+                        xpos = startx + tx
+                        if xpos-charRound < mx < xpos+charRound:
+                            self.pointer = index
+                            self.highLightStart = index
+                        index += 1
+            #highlighter
+            print(mb)
+            if x - x2 / 2 < mx < x + x2 / 2 and mb == -1:
+                index = 0
+                startx = self.guiText.textStartPos[0]
+                _text = self.text + " "
+                if len(self.text) != 0:
+                    while index < len(_text):
+                        tx = self.font.size(_text[:index])[0]
+                        charRound = self.font.size(_text[index])[0]/2
+                        xpos = startx + tx
+                        if xpos-charRound < mx < xpos+charRound:
+                            if index !=self.pointer:
+                                self.highLighting = True
+                            self.highLightEnd = index
+                            self.pointer = index
+                        index += 1
+                self.highLightedCursor = ((t1x, y + t1y / 2.5), (t1x, y - t1y / 2.5))
+
+            if mb != -1:
+                self.highLighting = False
 
 
-            if self.Input.cursor():
-                t1x, t1y = self.font.size(text1)
-                t1x -= (textX + textOffset[0]) / 2 + textOffset[0] / 2
-                if t1x > (self.size[0] * self.scale) / 2 - self.theme.border * self.scale:
-                    t1x = (self.size[0] * self.scale) / 2 - self.theme.border * self.scale
-                self.cursor = ((x + t1x, y + t1y / 2.5), (x + t1x, y - t1y / 2.5))
-
-                # set pointer on mouse click
-                if x - x2 / 2 < mx < x + x2 / 2 and y - y2 / 2 < my < y + y2 / 2 and mb == 1:
-                    self.Input.clicked()
-                    mx = mx - self.screen[0] - centerX * self.scale
 
         else:
             _text = self.text
             tx, ty = self.font.size(_text)
-            if maxTextLength != False:
-                while tx + 10 > x2:
+            if self.maxTextLength != False:
+                while tx + 10 > x2-self.padding*2:
                     _text = _text[1:]
                     tx, ty = self.font.size(_text)
-            Text(self.render_window, (centerX, centerY), _text, self.in_box, radius=self.radius,
-                 size=self.size, background_color=bgcolor).render()
+            self.guiText.change_text(_text)
 
     def get_text(self):
         return str(self.text)
@@ -991,12 +1055,22 @@ class TextBox:
     def change_text(self, text):
         p_text = self.text
         self.text = str(text)
+        self.guiText.change_text(text)
         return str(p_text)
 
+    def highlight(self):
+        if self.highLighting and self.highLightStart != self.highLightEnd:
+            thickness = self.font.size(self.text)[1]
+            startx = self.guiText.textStartPos[0] + self.font.size(self.text[:self.highLightStart])[0]
+            endx = self.guiText.textStartPos[0] + self.font.size(self.text[:self.highLightEnd])[0]
+            y = self.screen[1] + self.pos[1] * self.scale
+            pygame.draw.line(self.display, (33, 66, 131), (startx,y), (endx,y), thickness)
+
     def render(self):
-        self.guiText.render()
+        self.guiText.render(self.highlight)
         start,end = self.cursor
-        if self.Input.cursor():
+        if self.Input.cursor() and self.in_text:
             pygame.draw.line(self.display, self.tcolor, start,end,
                              self.scale)
+
 
