@@ -1,9 +1,7 @@
 import random
 import time
-import ctypes
-import os
-import time
-from vulkan import *
+import Network as N
+import pygame
 import json
 
 import my_gui as gui
@@ -11,10 +9,6 @@ import math
 import os
 import traceback
 import ctypes
-
-import Network as N
-import PyChat
-
 
 
 def load_config():
@@ -29,6 +23,7 @@ def load_config():
         config['theme'] = config_["theme"]
         config["volume"] = config_["volume"]
         config["target_fps"] = config_["target_fps"]
+        config["version"] = config_["version"]
         return config
     except:
         config = {}
@@ -39,44 +34,8 @@ def load_config():
         config['theme'] = "Default theme"
         config["volume"] = 100
         config["target_fps"] = 20
+        config["version"] = 0
         return config
-
-class user_class:
-    def __init__(self):
-        self.name = "No Name"
-        self.position = 0
-        self.color1 = (255, 0, 0)
-        self.color2 = (0, 255, 0)
-        self.color3 = (0, 0, 255)
-        self.highScores = {}
-        self.playTime = {}
-        self.currentGames = {}
-
-    def load_user(self,player):
-        with open(f"playerdata/{player}.json","r") as player_info:
-            player_info = json.loads(player_info.read())
-        self.name = player_info["name"]
-        self.position = player_info["position"]
-        self.color1 = player_info["color1"]
-        self.color2 = player_info["color2"]
-        self.color3 = player_info["color3"]
-        self.highScores = player_info["scores"]
-        self.playTime = player_info["playtime"]
-
-    def save_user(self):
-        with open(f"playerdata/{self.name}.json","w") as player_info:
-            dict_player = {}
-            dict_player["name"] = self.name
-            dict_player["position"] = self.position
-            dict_player["color1"] = self.color1
-            dict_player["color2"] = self.color2
-            dict_player["color3"] = self.color3
-            dict_player["scores"] = self.highScores
-            playtime = {}
-            for each in self.playTime:
-                playtime[each] = round(self.playTime[each],2)
-            dict_player["playtime"] = playtime
-            player_info.write(json.dumps(dict_player))
 
 
 #init pygame
@@ -84,20 +43,21 @@ pygame.init()
 pygame.mixer.init()
 pygame.font.init()
 
-App_Name = "Sbeve chat"
+App_Name = "PyChat"
 
 pygame.display.set_caption(App_Name)
 
 #init some vars
 p_frame = time.perf_counter()
 fps = 0
-menu_fps = 20
+menu_fps = 60
 game_fps = 60
 done = False
 debug = False
 setting = False
 reset_screen = False
 check_settings = False
+user_login = False
 resolutions = ("3840x2160","1560x1600","2560x1440","1920x1440","1920x1200","1920x1080","1680x1050","1600x1200","1600x1024","1600x900","1440x900","1366x768","1360x768","1280x1024","1280x960","1280x800","1280x768","1280x720","1152x864","1024x768","800x600")
 frame = 0
 
@@ -121,11 +81,9 @@ if __name__ == "__main__":
     Main_window = gui.Layer(Renderer, Input, set_order=0)
     Debug_window = gui.Layer(Renderer, Input, set_order=-1)
 
-
     scale = config["scale"]
-    tcolor, bcolor, bgcolor = theme.colors()
 
-    main_screen = ["boot"]
+    main_screen = ["load_user"]
     sub_screen = ["main"]
 
     if screen_mode == "Fullscreen":
@@ -142,9 +100,11 @@ if __name__ == "__main__":
     screen = (current_w / 2, current_h / 2)
     screen_info = (display, screen, scale)
     theme.screen_info(screen_info)
-    popUp = gui.pop_up(Main_window, (0, -current_h / (2 * scale) - 25), (0, -current_h / (2 * scale) + 15), 2, 3, (300, 15),f"{App_Name}™ © Patent Pending Sbeve Co. Inc LLC")
+    popUp = gui.pop_up(Main_window,"popUp", (0, -current_h / (2 * scale) - 25), (0, -current_h / (2 * scale) + 15), 2, 3, (300, 15),f"{App_Name}™ © Patent Pending Sbeve Co. Inc LLC")
     volume_gui = gui.Slider(Main_window, (0, 0), (100, 15), "right", Input, volume)
-
+    n = N.Network()
+    loading_text = gui.Text(Main_window,"loading_text", (0, 0), "Connecting to servers..." , in_box=True, size=(200, 40), rounded=True, radius=10)
+    Main_window.add_element("loading_text",loading_text)
     while not done:
 #check if the scale has changed
         if reset_screen:
@@ -220,22 +180,20 @@ if __name__ == "__main__":
 
 #main screen
 
-        display.fill((0, 0, 0))
+        display.fill(theme.basecolor)
 #main menu
         try:
             match main_screen[-1]:
-                case "boot":
-                    n = N.Network()
-                    n.connect()
-                    user = user_class()
-                    user.load_user("steve")
-
-                    if n.is_connected():
-                        pychat = PyChat.chat(Main_window, n, Input, user)
-                        main_screen = ["main_menu"]
+                case "load_user":
+                    match sub_screen[-1]:
+                        case "main":
+                            if not n.is_connected():
+                                n.connect()
 
 
                 case "main_menu":
+                    if not user_login:
+                        main_screen.append("load_user")
                     temp = theme.font
                     theme.font = pygame.font.SysFont("impact", 30 * scale)
                     Title = gui.Label(Main_window, (0, -current_h / (2 * scale) + 50), App_Name, in_box=True, size=(350, 40))
@@ -243,6 +201,11 @@ if __name__ == "__main__":
                     theme.font = temp
                     match sub_screen[-1]:
                         case "main":
+                            if gui.button(Main_window, (0, 50), (100, 20), "rounded box", Input):
+                                main_screen.append("test")
+                                gui.RoundBox(Main_window,"box1",(0,0),(100,20),5)
+                                gui.RoundBox(Main_window,"box2", (0, 50), (200, 20), 5)
+                                gui.RoundBox(Main_window,"box3", (0, -50), (200, 40), 10)
                             if gui.button(Main_window, (0, 75), (100, 20), "Settings", Input):
                                 main_screen.append("settings")
 
@@ -250,7 +213,12 @@ if __name__ == "__main__":
                                 done = True
                         case _:
                             pass
-
+                case "test":
+                    match sub_screen[-1]:
+                        case "main":
+                            if gui.button(Main_window, (0, current_h / (2 * scale) - 15), (100, 20), "Back", Input):
+                                if sub_screen[-1] == "main":
+                                    main_screen.pop()
 #setting screen
                 case "settings":
                     match sub_screen[-1]:
@@ -268,6 +236,7 @@ if __name__ == "__main__":
                                 t_color = gui.color_picker(Main_window, (60, -25), (100, 20), "Text color", color=tcolor)
                                 b_color = gui.color_picker(Main_window, (60, 0), (100, 20), "Text border", color=bcolor)
                                 bg_color = gui.color_picker(Main_window, (60, 25), (100, 20), "Text background", color=bgcolor)
+                                base_color = gui.color_picker(Main_window, (60, 50), (100, 20), "Base color",color=basecolor)
 
                             if gui.button(Main_window, (0, 0), (100, 20), "Manage Themes", Input):
                                 sub_screen.append("Themes")
@@ -320,6 +289,7 @@ if __name__ == "__main__":
                                     t_color = gui.color_picker(Main_window, (60, -25), (100, 20), "Text color", edit_theme.tcolor)
                                     b_color = gui.color_picker(Main_window, (60, 0), (100, 20), "Text border", edit_theme.bcolor)
                                     bg_color = gui.color_picker(Main_window, (60, 25), (100, 20), "Text background", edit_theme.bgcolor)
+                                    base_color = gui.color_picker(Main_window, (60, 50), (100, 20), "Base color", edit_theme.basecolor)
                                     sub_screen.append("Edit Theme")
                                 if gui.button(Main_window, (100, pos), (60, 20), "Remove", Input):
                                     if gui.alert(Main_window, (0, 0), (150, 100), f"Are you sure you want to PERMANENTLY delete {Theme} forever!", "Yes", "No", Input, frame):
@@ -336,8 +306,9 @@ if __name__ == "__main__":
                             tcolor = t_color.get_color(Input)
                             bcolor = b_color.get_color(Input)
                             bgcolor = bg_color.get_color(Input)
+                            basecolor = base_color.get_color(Input)
 
-                            if gui.button(Main_window, (0, 50), (100, 20), "Font", Input):
+                            if gui.button(Main_window, (0,75), (100, 20), "Font", Input):
                                 all_fonts = os.listdir(r'C:\Windows\fonts')
                                 fonts = []
                                 for font in all_fonts:
@@ -350,7 +321,7 @@ if __name__ == "__main__":
                             if gui.button(Main_window, (0, current_h / (2 * scale) - 65), (100, 20), "Save Theme", Input):
                                 new_theme = gui.Theme()
                                 new_theme.screen_info(screen_info)
-                                new_theme.colors((tcolor, bcolor, bgcolor))
+                                new_theme.colors((tcolor, bcolor, bgcolor, basecolor))
                                 new_theme.sound_info = theme.sound_info
                                 new_theme.font_name = theme.font_name
                                 new_theme.font_size = theme.font_size
@@ -392,7 +363,7 @@ if __name__ == "__main__":
             elif sub_screen == []:
                 sub_screen.append("main")
             else:
-                popUp = gui.pop_up(Main_window, (0, -current_h / (2 * scale) - 25), (0, -current_h / (2 * scale) + 15), 2, 10, (-1, 15),f"Error in {main_screen[-1],sub_screen[-1]}. Error : {e}")
+                popUp = gui.pop_up(Main_window, "popUp", (0, -current_h / (2 * scale) - 25), (0, -current_h / (2 * scale) + 15), 2, 10, (-1, 15),f"Error in {main_screen[-1],sub_screen[-1]}. Error : {e}")
                 print(theme.sounds("Errors"))
                 if theme.sounds("Errors") != None:
                     pygame.mixer.Sound.play(theme.sounds("Errors")[random.randrange(0,len(theme.sounds("Errors")))])

@@ -8,7 +8,7 @@ import random
 from datetime import datetime
 import traceback
 
-with open ("Server/config.txt","r") as config:
+with open ("Server/config.txt", "r") as config:
     server = config.readline().split(" = ")[-1].strip("\n")
     port = int(config.readline().split(" = ")[-1])
 
@@ -61,7 +61,7 @@ def client(conn,addr,client_ID):
             _data = conn.recv(2048).decode("utf-8")
             if _data == "":
                 print(addr, "disconnected", "at", datetime.now().strftime("%I:%M:%S%p"))
-                clients.remove(addr)
+                clients.pop(addr)
                 break
             else:
                 _data = _data.split("&")
@@ -77,18 +77,6 @@ def client(conn,addr,client_ID):
 # server management
                     elif data["packet"] == "get_server_info":
                         reply += json.dumps({"packet": "server_info", "server_info": servers[data["server"]]["server_info"]}) + "&"
-
-# join a game server
-                    elif data["packet"] == "join_server":
-                        servers[data["server"]]["clients"][client_ID] = data["name"]
-                        reply += json.dumps({"packet":"join_server","clients":servers[data["server"]]["clients"]}) + "&"
-
-# Leave a game server
-                    elif data["packet"] == "leave_server":
-                        name = servers[data["server"]]["server_info"]["Name"]
-                        if name == "Snake":
-                            leave_snake(client_ID,data["server"])
-                        reply += json.dumps({"packet":"leave_server"}) + "&"
 
 # create new server
                     elif data["packet"] == "new_server":
