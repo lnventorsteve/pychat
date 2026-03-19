@@ -2,11 +2,8 @@ import json
 import math
 import os
 import time
-
-
 import pyperclip
 import pygame
-from pygments import highlight
 
 pygame.init()
 default_font = pygame.font.SysFont(pygame.font.get_default_font(), 24)
@@ -111,7 +108,6 @@ shift_table = {
 resolutions = ("3840x2160", "1560x1600", "2560x1440", "1920x1440", "1920x1200", "1920x1080", "1680x1050",
                "1600x1200", "1600x1024", "1600x900", "1440x900", "1366x768", "1360x768", "1280x1024",
                "1280x960", "1280x800", "1280x768", "1280x720", "1152x864", "1024x768", "800x600")
-
 
 def active(self):
     if type(self) != list:
@@ -283,15 +279,28 @@ class Input:
         self.looked_x = 0
         self.looked_y = 0
         self.capture_mouse = False
+        self.nubClicks = 0
+        self.last_mouse_button = 0
+        self.last_click = 0
 
     def get_input(self, event, frame):
         if event.type == pygame.MOUSEMOTION:
             mx, my = self.mouse_position = event.pos
 
         if event.type == pygame.MOUSEBUTTONDOWN:
+            print(event.button , self.last_mouse_button,self.nubClicks)
+            if event.button == self.last_mouse_button:
+                print(time.perf_counter()+0.5,self.last_click)
+                if time.perf_counter()+0.5>self.last_click:
+                    self.nubClicks+=1
+                else:
+                    self.nubClicks = 0
+                self.last_mouse_button = event.button
+                self.last_click = time.perf_counter()
             self.mouse_button = event.button
 
         if event.type == pygame.MOUSEBUTTONUP:
+            self.last_mouse_button = abs(self.mouse_button)
             self.mouse_button = 0
             mb = event.button
             scroll = mb
@@ -903,11 +912,13 @@ class TextBox:
                 if sound != False:
                     pygame.mixer.Sound.play(sound)
                 self.in_text = True
+
         else:
-            if mb == 0:
+            if mb == 1:
                 self.in_text = False
                 if self.text == "":
                     self.text = self.default_text
+                self.highLighting = False
 
         if self.in_text:
             # split text at cursor
@@ -957,7 +968,9 @@ class TextBox:
                 elif key == 118 and "CTRL" in mods:
                     print("ctrl-v")
                     data = pyperclip.paste()
+
                     self.text = text1 + data + text2
+                    self.pointer = len(text1 + data)
                 # ctrl-c
                 elif key == 99 and "CTRL" in mods:
                     print("ctrl-c")
@@ -1015,9 +1028,15 @@ class TextBox:
                         if xpos-charRound < mx < xpos+charRound:
                             self.pointer = index
                             self.highLightStart = index
+                        elif index == 0 and mx < xpos+charRound:
+                            self.pointer = index
+                            self.highLightStart = index
+                        elif index == len(_text)-1 and xpos-charRound < mx:
+                            self.pointer = index
+                            self.highLightStart = index
+
                         index += 1
             #highlighter
-            print(mb)
             if x - x2 / 2 < mx < x + x2 / 2 and mb == -1:
                 index = 0
                 startx = self.guiText.textStartPos[0]
@@ -1032,12 +1051,21 @@ class TextBox:
                                 self.highLighting = True
                             self.highLightEnd = index
                             self.pointer = index
+                        elif index == 0 and mx < xpos+charRound:
+                            if index !=self.pointer:
+                                self.highLighting = True
+                            self.highLightEnd = index
+                            self.pointer = index
+                        elif index == len(_text)-1 and xpos-charRound < mx:
+                            if index !=self.pointer:
+                                self.highLighting = True
+                            self.highLightEnd = index
+                            self.pointer = index
                         index += 1
-                self.highLightedCursor = ((t1x, y + t1y / 2.5), (t1x, y - t1y / 2.5))
-
-            if mb != -1:
-                self.highLighting = False
-
+            if self.highLightStart<self.highLightEnd:
+                self.highLightedText = self.text[self.highLightStart:self.highLightEnd]
+            else:
+                self.highLightedText = self.text[self.highLightEnd:self.highLightStart]
 
 
         else:

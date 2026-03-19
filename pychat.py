@@ -1,11 +1,10 @@
-
+import subprocess
 import Network as N
 import my_gui_2 as gui
 from my_gui_2 import active
 
 if __name__ == "__main__":
     app = gui.App("PyChat")
-
     main_window = app.Main_window
     main_screen = ["load_user"]
     sub_screen = ["main"]
