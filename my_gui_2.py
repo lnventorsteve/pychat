@@ -642,15 +642,15 @@ class Layer:
 #elements
 
 class Box:
-    def __init__(self, layer, pos, size, border_color=False, background_color=False, resize=False):
+    def __init__(self, layer, pos, size, border_color=None, background_color=None, resize=False):
         self.window = layer
         self.renderer = layer.renderer
         self.theme = layer.theme
         self.display, self.screen, self.scale = self.theme.screen_info()
         self.tcolor, self.bcolor, self.bgcolor = self.theme.colors()[:-1]
-        if border_color != False:
+        if border_color is not None:
             self.bcolor = border_color
-        if background_color != False:
+        if background_color is not None:
             self.bgcolor = background_color
 
         self.init_pos = pos
@@ -688,19 +688,19 @@ class Box:
                                                       self.x2 - self.theme.border * 2, self.y2 - self.theme.border * 2))
 
 class RoundBox:
-    def __init__(self, layer, pos, size, radius=False, border_color=False, background_color=False, resize=False):
+    def __init__(self, layer, pos, size, radius=None, border_color=None, background_color=None, resize=False):
         self.window = layer
         self.renderer = layer.renderer
         self.theme = layer.theme
         self.display, self.screen, self.scale = self.theme.screen_info()
         self.tcolor, self.bcolor, self.bgcolor = self.theme.colors()[:-1]
-        if border_color != False:
+        if border_color is not None:
             self.bcolor = border_color
-        if background_color != False:
+        if background_color is not None:
             self.bgcolor = background_color
 
         self.init_pos = pos
-        if not radius:
+        if radius is not None:
             self.radius = radius
         else:
             self.radius = self.theme.radius
@@ -750,9 +750,9 @@ class RoundBox:
         pygame.draw.rect(self.display, self.bgcolor, ((self.x - self.x2 / 2) + border,(self.y - self.y2 / 2) + radius, self.x2 - border * 2, self.y2 -  radius * 2))
 
 class Text:
-    def __init__(self, layer, pos, text, in_box=False, radius=False, size=(0, 0), text_color=False,
-                 border_color=False, background_color=False, center="center",
-                 cut_dir=False, resize=False,padding=False):
+    def __init__(self, layer, pos, text, in_box=None, radius=None, size=(0, 0), text_color=None,
+                 border_color=None, background_color=None, center="center",
+                 cut_dir=None, resize=None,padding=None):
         self.render_window = layer
         self.renderer = layer.renderer
         self.theme = theme = layer.theme
@@ -768,15 +768,15 @@ class Text:
         self.cut_dir = cut_dir
         self.isActive = False
 
-        if text_color:
+        if text_color is not None:
             self.tcolor = text_color
-        if border_color:
+        if border_color is not None:
             self.bcolor = border_color
-        if background_color:
+        if background_color is not None:
             self.bgcolor = background_color
-        if padding:
+        if padding is not None:
             self.padding = padding
-        if radius:
+        if radius is not None:
             self.radius = radius
 
         self.size = size
@@ -789,7 +789,7 @@ class Text:
 
         if in_box:
             print(self.radius)
-            if self.radius != 0:
+            if self.radius is not None:
                 self.box = RoundBox(self.render_window, self.pos, self.size, self.radius, self.bcolor, self.bgcolor, resize=self.resize)
             else:
                 self.box = Box(self.render_window, self.pos, self.size, self.bcolor, self.bgcolor, resize=self.resize)
@@ -1198,7 +1198,55 @@ class Button:
         self.guiText.box.bgcolor = bgcolor
         return False
 
+    def onClick(self, func, args):
+        if self.update():
+            func(*[args])
 
     def render(self):
         self.guiText.render()
 
+class DisplayWindow:
+    def __init__(self, layer, pos, size, bcolor=None, bgcolor=None, resize=False, rounded=False, radius=None):
+        self.layer = layer
+        self.theme = theme = self.renderer.theme
+        self.display = theme.display
+        self.screen = theme.screen
+        self.scale = theme.scale
+        self.pos = pos
+        self.size = size
+        self.radius = radius
+        self.rounded = rounded
+        self.bcolor = bcolor
+        self.bgcolor = bgcolor
+        self.resize = resize
+        self.isActive = False
+        if radius is not None or rounded:
+            self.box = RoundBox(layer, pos, size, radius, bcolor, bgcolor, resize)
+        else:
+            self.box = Box(layer, pos, size, bcolor, bgcolor, resize)
+        self.elements = [self.box]
+        layer.add_element(self)
+
+    def update(self):
+        sx, sy = self.screen
+        x, y = self.pos
+        x, y = sx + x * self.scale, sy + y * self.scale
+        size_x, size_y = self.size
+        x2, y2 = size_x * self.scale, size_y * self.scale
+        x = x - x2 / 2
+        y = y - y2 / 2
+        self.box.change_pos((x,y))
+        self.isActive = True
+
+    def add_element(self, element):
+        self.elements.append(element)
+        return self.elements.index(element)
+
+    def remove_element(self, element):
+        self.elements.pop(element)
+
+    def render(self):
+        for element in self.elements:
+            if element.isActive:
+                element.render()
+                element.isActive = False
