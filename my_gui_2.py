@@ -182,7 +182,7 @@ class Config:
         except Exception as e:
             print("error saving config",e)
 
-class App():
+class App:
     def __init__(self, appname):
         pygame.init()
         pygame.mixer.init()
@@ -424,6 +424,8 @@ class Theme:
         self.font_name = font_name
         self.font = font
         self.font_size = font_size
+        self.fonts = {}
+        self.fontNames = []
         self.Colors = {text_color, border_color, background_color,base_color}
         self.tcolor = text_color
         self.bcolor = border_color
@@ -452,32 +454,35 @@ class Theme:
         else:
             file = Theme
 
-        with open(f"{self.path}/Themes/{file}.json", "r") as Theme:
-            Theme = json.loads(Theme.read())
+        with open(f"{self.path}/Themes/{file}.json", "r") as fTheme:
+            jTheme = json.loads(fTheme.read())
             Fonts = []
-            for font in Theme["Fonts"]:
-                Fonts.append(font)
-            self.font = pygame.font.SysFont(Fonts[0], Theme["Fonts"][Fonts[0]] * config.scale)
-            self.font_size = Theme["Fonts"][Fonts[0]]
-            self.font_name = Fonts[0]
-            for sound in Theme["Sounds"]:
+            self.fonts = jTheme["Fonts"]
+            self.fontNames = list(self.fonts.keys())
+            print(self.fontNames)
+
+
+            self.font = pygame.font.SysFont(self.fontNames[0], self.fonts[self.fontNames[0]] * config.scale)
+            self.font_size = self.fonts[self.fontNames[0]]
+            self.font_name = self.fontNames[0]
+            for sound in jTheme["Sounds"]:
                 try:
-                    self.Sounds[sound] = pygame.mixer.Sound(f"{self.path}/sounds/{Theme['Sounds'][sound]['name']}")
-                    self.Sounds[sound].set_volume(Theme["Sounds"][sound]["volume"])
+                    self.Sounds[sound] = pygame.mixer.Sound(f"{self.path}/sounds/{jTheme['Sounds'][sound]['name']}")
+                    self.Sounds[sound].set_volume(jTheme["Sounds"][sound]["volume"])
                 except:
                     self.Sounds[sound] = []
-                    for name in Theme['Sounds'][sound]['names']:
+                    for name in jTheme['Sounds'][sound]['names']:
                         temp = pygame.mixer.Sound(f"{self.path}/sounds/{name}")
-                        temp.set_volume(Theme["Sounds"][sound]["volume"])
+                        temp.set_volume(jTheme["Sounds"][sound]["volume"])
                         self.Sounds[sound].append(temp)
-            self.sound_info = Theme["Sounds"]
-            self.Colors = Theme["Colors"]
-            self.tcolor = Theme["Colors"]['Text color']
-            self.bcolor = Theme["Colors"]['Border color']
-            self.bgcolor = Theme["Colors"]['Background color']
-            self.basecolor = Theme["Colors"]['Base color']
-            self.border = Theme["Properties"]["Border Thickness"]
-            self.radius = Theme["Properties"]["Radius"]
+            self.sound_info = jTheme["Sounds"]
+            self.Colors = jTheme["Colors"]
+            self.tcolor = jTheme["Colors"]['Text color']
+            self.bcolor = jTheme["Colors"]['Border color']
+            self.bgcolor = jTheme["Colors"]['Background color']
+            self.basecolor = jTheme["Colors"]['Base color']
+            self.border = jTheme["Properties"]["Border Thickness"]
+            self.radius = jTheme["Properties"]["Radius"]
 
     def change_Theme(self, new_theme):
         with open(f"{self.path}/Themes/{new_theme}.json", "r") as Theme:
@@ -507,7 +512,7 @@ class Theme:
             self.border = Theme["Properties"]["Border Thickness"]
             self.radius = Theme["Properties"]["Radius"]
 
-    def fonts(self, font_name=False, font_size=False):
+    def set_font(self, font_name=False, font_size=False):
         if font_name != False:
             self.font_name = font_name
         if font_size != False:
@@ -669,6 +674,13 @@ class Box:
         self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
         self.x2, self.y2 = self.size
         self.x2, self.y2 = self.x2 * self.scale * scale[0], self.y2 * self.scale * scale[1]
+    def change_pos(self, pos):
+        self.px, self.py = self.pos = pos
+        self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
+        self.x2, self.y2 = self.size
+        self.x2, self.y2 = self.x2 * self.scale, self.y2 * self.scale
+        self.rect = (self.x - self.x2 / 2, self.y - self.y2 / 2, self.x + self.x2 / 2, self.y + self.y2 / 2)
+
     def render(self):
         pygame.draw.rect(self.display, self.bcolor, (self.x - self.x2 / 2, self.y - self.y2 / 2, self.x2, self.y2))
         pygame.draw.rect(self.display, self.bgcolor, ((self.x - self.x2 / 2) + self.theme.border,
@@ -676,7 +688,7 @@ class Box:
                                                       self.x2 - self.theme.border * 2, self.y2 - self.theme.border * 2))
 
 class RoundBox:
-    def __init__(self, layer, pos, size, radius, border_color=False, background_color=False, resize=False):
+    def __init__(self, layer, pos, size, radius=False, border_color=False, background_color=False, resize=False):
         self.window = layer
         self.renderer = layer.renderer
         self.theme = layer.theme
@@ -688,6 +700,10 @@ class RoundBox:
             self.bgcolor = background_color
 
         self.init_pos = pos
+        if not radius:
+            self.radius = radius
+        else:
+            self.radius = self.theme.radius
         self.radius = radius
         self.resize = False
         self.isActive = False
@@ -709,6 +725,14 @@ class RoundBox:
         self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
         self.x2, self.y2 = self.size
         self.x2, self.y2 = self.x2 * self.scale * scale[0], self.y2 * self.scale * scale[1]
+
+    def change_pos(self, pos):
+        self.px, self.py = self.pos = pos
+        self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
+        self.x2, self.y2 = self.size
+        self.x2, self.y2 = self.x2 * self.scale, self.y2 * self.scale
+        self.rect = (self.x - self.x2 / 2, self.y - self.y2 / 2, self.x + self.x2 / 2, self.y + self.y2 / 2)
+
     def render(self):
         radius = self.radius * self.scale
         pygame.draw.circle(self.display, self.bcolor,(self.x - self.x2 / 2 + radius, self.y - self.y2 / 2 + radius),radius)
@@ -739,7 +763,7 @@ class Text:
         self.tcolor, self.bcolor, self.bgcolor = theme.colors()[:-1]
         self.radius = self.theme.radius
         self.padding = theme.border + theme.scale*2
-        self.font = theme.fonts()
+        self.font = theme.font
         self.center = center
         self.cut_dir = cut_dir
         self.isActive = False
@@ -822,6 +846,12 @@ class Text:
         self.tx, self.ty = tx, ty
         self.text_text = self.font.render(str(text), True, self.tcolor)
 
+    def change_pos(self,new_pos):
+        self.box.change_pos(new_pos)
+        sx, sy = self.screen
+        x, y = new_pos
+        self.x, self.y = sx + x * self.scale, sy + y * self.scale
+        self.init_pos = (self.x, self.y)
     def render(self, func = None):
         if self.in_box:
             self.box.render()
@@ -835,7 +865,6 @@ class Text:
 
         self.display.blit(self.text_text,self.textStartPos)
 
-
 class TextBox:
     def __init__(self, render_window ,Input, pos, size, text, text_center="center", center="center",
                  in_box=True, default_text="", resizeable=False, maxTextLength=False, window=None, radius=False, padding=False):
@@ -848,7 +877,6 @@ class TextBox:
         self.screen_info = theme.screen_info()
         self.display, self.screen, self.scale = self.screen_info
         self.in_text = False
-        self.name = ""
         self.default_text = default_text
         self.text = str(text)
         self.start_pos = pos
@@ -857,7 +885,7 @@ class TextBox:
         else:
             self.pos = pos
         self.size = size
-        self.font = theme.fonts()
+        self.font = theme.font
         self.pointer = len(text)
         self.highLightStart = 0
         self.highLightEnd = 0
@@ -906,7 +934,8 @@ class TextBox:
                 b = 0
             else:
                 b -= 16
-            bgcolor = r, g, b
+            bgcolor = (r, g, b)
+
             if mb == 1:
                 if self.text == self.default_text:
                     self.text = ""
@@ -920,7 +949,7 @@ class TextBox:
                 if self.text == "":
                     self.text = self.default_text
                 self.highLighting = False
-
+        self.guiText.box.bgcolor = bgcolor
         if self.in_text:
             # split text at cursor
             if self.pointer == 0:
@@ -1102,4 +1131,74 @@ class TextBox:
             pygame.draw.line(self.display, self.tcolor, start,end,
                              self.scale)
 
+class Button:
+    def __init__(self, render_window, Input, pos, size, text, text_center="center", center="center", resizeable=False, window=None, radius=False, padding=False):
+        self.render_window = render_window
+        self.Input = Input
+        self.renderer = render_window.renderer
+        self.theme = theme = render_window.theme
+        self.tcolor, self.bcolor, self.bgcolor = theme.colors()[:-1]
+        self.sound = theme.sounds("button")
+        self.screen_info = theme.screen_info()
+        self.display, self.screen, self.scale = self.screen_info
+        self.text = str(text)
+        self.start_pos = pos
+        if window is not None:
+            self.pos = window.pos[0] + pos[0], window.pos[1] + pos[1]
+        else:
+            self.pos = pos
+        self.size = size
+        self.font = theme.font
+        self.radius = radius
+        self.center = center
+        self.text_center = text_center
+        self.resizeable = resizeable
+        self.window = window
+        self.padding = theme.border + theme.scale*2
+        if padding:
+            self.padding = padding
+        self.isActive = False
+        self.guiText = Text(self.render_window, pos, text, in_box=True, radius=self.radius,
+             size=self.size, background_color=self.bgcolor,center=self.text_center,padding=self.padding)
+        self.render_window.add_element(self)
+
+    def update(self):
+        if self.window is not None:
+            self.pos = self.window.pos[0] + self.start_pos[0], self.window.pos[1] + self.start_pos[1]
+        self.isActive = True
+        sound = self.sound
+        sx, sy = self.screen
+        x, y = self.pos
+        x, y = sx + x * self.scale, sy + y * self.scale
+        size_x, size_y = self.size
+        x2, y2 = size_x * self.scale, size_y * self.scale
+        mx, my, mb = self.Input.mouse()
+        bgcolor = self.bgcolor
+        if x - x2 / 2 < mx < x + x2 / 2 and y - y2 / 2 < my < y + y2 / 2:
+            r, g, b = bgcolor
+            if r - 16 < 0:
+                r = 0
+            else:
+                r -= 16
+            if g - 16 < 0:
+                g = 0
+            else:
+                g -= 16
+            if b - 16 < 0:
+                b = 0
+            else:
+                b -= 16
+            bgcolor = (r, g, b)
+            self.guiText.box.bgcolor = bgcolor
+            if mb == 1:
+                self.Input.clicked()
+                if sound != False:
+                    pygame.mixer.Sound.play(sound)
+                return True
+        self.guiText.box.bgcolor = bgcolor
+        return False
+
+
+    def render(self):
+        self.guiText.render()
 

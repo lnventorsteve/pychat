@@ -120,6 +120,23 @@ def client(conn,addr,client_ID):
                         reply += json.dumps({"packet": data["key"], "data": servers[data["server"]][data["key"]]}) + "&"
 
 # PyChat
+                    elif data["packet"] == "checkId":
+                        with open("Server/users.txt","r") as f:
+                            requestedUser = data["userId"]
+                            for user in f.readlines():
+                                userId,userPw,userStatus,userName = user.split(",")
+                                if int(userId) == int(requestedUser):
+                                    reply += json.dumps({"packet": "checkId", "status":userStatus}) + "&"
+                                    break
+                                reply += json.dumps({"packet": "checkId", "status": -1}) + "&"
+
+                    elif data["packet"] == "userLogin":
+                        submittedPw = data["userPw"]
+                        if userPw == submittedPw:
+                            reply += json.dumps({"packet": "userLogin","status": 0}) + "&"
+                            break
+                        reply += json.dumps({"packet": "userLogin", "status": -1}) + "&"
+
                     elif data["packet"] == "new_PyChat":
                         server_IDs = []
                         for server in servers:
