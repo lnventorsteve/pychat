@@ -1,4 +1,4 @@
-#version 0.0.5
+#version 0.0.6
 import os.path
 import traceback
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
                                 #with open("user.txt", "w") as f:
                                 #    f.writelines("userId,None\n,userPw,None\n")
                                 loginWindow = gui.DisplayWindow(app, main_window,(0,0), (200,200),"Login")
-                                user_name = gui.TextBox(app, loginWindow, (0,0),(180,20),"",text_center="left")
+                                user_name = gui.TextBox(app, loginWindow, (0,0),(180,20),"He ha",text_center="left")
 
                                 main_screen = ["login"]
 

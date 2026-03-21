@@ -1,4 +1,4 @@
-#version 0.3
+#version 0.0.6
 import json
 import math
 import os
@@ -169,6 +169,7 @@ def in_window_update(self,window):
     #    scale = (window.size[0] / window.init_size[0], window.size[1] / window.init_size[1])
     #else:
     #    scale = (1, 1)
+    print("windowpos:",window.pos)
     if hasattr(self,"change_pos"):
         self.change_pos((self.init_pos[0] + window.pos[0], self.init_pos[1] + window.pos[1]))
 
@@ -1074,12 +1075,9 @@ class TextBox:
         return str(p_text)
 
     def change_pos(self,pos):
+        self.pos = pos
         for element in self.elements:
             in_window_update(element,self)
-        sx, sy = self.screen
-        x, y = pos
-        self.x, self.y = sx + x * self.scale, sy + y * self.scale
-        self.pos = (self.x, self.y)
 
     def highlight(self):
         if self.highLighting and self.highLightStart != self.highLightEnd:
@@ -1132,7 +1130,12 @@ class Button:
 
     def add_element(self,element):
         self.elements.append(element)
-        
+
+    def change_pos(self,pos):
+        self.pos = pos
+        for element in self.elements:
+            in_window_update(element,self)
+
     def update(self):
         sound = self.sound
         sx, sy = self.screen
@@ -1243,9 +1246,11 @@ class DisplayWindow:
         self.elements.pop(element)
 
     def render(self):
-        print("rendering")
+        print("WindowPos:", self.pos)
         count = 0
         for element in self.elements:
+            print(element)
+            print(element.pos)
             element.render()
             count+=1
         return count
