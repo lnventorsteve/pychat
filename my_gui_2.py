@@ -645,6 +645,7 @@ class Renderer:
             layer.update()
 
     def render(self):
+        print(self.layers)
         self.layers.sort(key=self.sort_layer)
         count = 0
         for layer in self.layers:
@@ -1201,10 +1202,9 @@ class DisplayWindow:
         self.in_box = in_box
         self.box = Box(self, pos, size, radius, bcolor, bgcolor, resize)
         if name is not None:
-            self.name = Text(self, (pos[0],pos[1]-size[1]/2+10), name,True,(size[0],20), center=center, tcolor=tcolor
-                        , bcolor=bcolor, bgcolor=bgcolor, resize=resize, radius=radius)
-
-        self.renderer.add_layer(self)
+            self.name = Text(self, (pos[0],pos[1]-size[1]/2+10), name ,(size[0],20), center=center, tcolor=tcolor, resize=resize)
+        print("added layer")
+        app.Renderer.add_layer(self)
 
     def update(self):
         for element in self.elements:
@@ -1222,9 +1222,6 @@ class DisplayWindow:
                     self.last_click = time.perf_counter()
                     self.Input.clicked()
                     self.moving = True
-                if self.Input.mouse_button == -1:
-                    self.last_click = time.perf_counter()
-                    self.pos = (self.pos[0]-self.Input.looked_x/self.scale,self.pos[1]-self.Input.looked_y/self.scale)
 
 
 
@@ -1246,6 +1243,7 @@ class DisplayWindow:
         self.elements.pop(element)
 
     def render(self):
+        print("rendering")
         count = 0
         for element in self.elements:
             element.render()
