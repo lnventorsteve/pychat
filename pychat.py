@@ -57,6 +57,7 @@ if __name__ == "__main__":
                                 #    f.writelines("userId,None\n,userPw,None\n")
                                 loginWindow = gui.DisplayWindow(app, main_window,(0,0), (200,200),"Login")
                                 user_name = gui.TextBox(app, loginWindow, (0,0),(180,20),"He ha",text_center="left")
+                                labelThing = gui.Label(app,loginWindow,(0,25),user_name,"hehe",in_box=True,size=(180,20))
 
                                 main_screen = ["login"]
 

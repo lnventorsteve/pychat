@@ -169,10 +169,8 @@ def in_window_update(self,window):
     #    scale = (window.size[0] / window.init_size[0], window.size[1] / window.init_size[1])
     #else:
     #    scale = (1, 1)
-    print("windowpos:",window.pos)
     if hasattr(self,"change_pos"):
         self.change_pos((self.init_pos[0] + window.pos[0], self.init_pos[1] + window.pos[1]))
-
 
 class Config:
     def __init__(self):
@@ -1246,11 +1244,50 @@ class DisplayWindow:
         self.elements.pop(element)
 
     def render(self):
-        print("WindowPos:", self.pos)
         count = 0
         for element in self.elements:
-            print(element)
-            print(element.pos)
             element.render()
             count+=1
         return count
+
+class Label:
+    def __init__(self, app, layer, pos, element, text, size=(0,0), in_box=False, radius=None, text_center="left", center="center"):
+        self.app = app
+        self.theme = app.theme
+        self.renderer = app.Renderer
+        self.scale = app.theme.scale
+        self.layer = layer
+        self.init_pos = pos
+        self.pos = pos
+        self.size = size
+        self.element = element
+        self.text = text
+        self.text_center = text_center
+        self.center = center
+        self.radius = radius
+
+        self.elements = []
+
+        if in_box:
+            self.box = Box(self, pos, self.size,self.radius)
+        self.guiText = Text(self,get_center("center",self.scale,self.pos,size=self.size),text,center=self.text_center)
+
+        layer.add_element(self)
+
+    def render(self):
+        count = 0
+        for element in self.elements:
+            element.render()
+            count += 1
+        return count
+
+    def change_pos(self, pos):
+        self.pos = pos
+        for element in self.elements:
+            in_window_update(element, self)
+
+    def add_element(self, element):
+        self.elements.append(element)
+
+    def remove_element(self, element):
+        self.elements.pop(element)
