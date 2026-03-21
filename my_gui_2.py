@@ -110,13 +110,6 @@ resolutions = ("3840x2160", "1560x1600", "2560x1440", "1920x1440", "1920x1200", 
                "1600x1200", "1600x1024", "1600x900", "1440x900", "1366x768", "1360x768", "1280x1024",
                "1280x960", "1280x800", "1280x768", "1280x720", "1152x864", "1024x768", "800x600")
 
-def active(self):
-    if type(self) != list:
-        self.isActive = True
-    else:
-        for each in self:
-            each.isActive = True
-
 def get_center(center, scale, pos, tx=0, ty=0, size=(0, 0)):
     x, y = pos
     sx, sy = size
@@ -139,6 +132,46 @@ def get_center(center, scale, pos, tx=0, ty=0, size=(0, 0)):
     elif center == "bottom_right":
         pos = (x - tx / 2 + sx, y - ty / 2 + sy)
     return pos
+
+def hit_box(renderer, pos, size, Input, sound="button"):
+    theme = renderer.theme
+    display, screen, scale = theme.screen_info()
+    sx, sy = screen
+    x, y = pos
+    x, y = sx + x * scale, sy + y * scale
+    x2, y2 = size
+    mx, my, mb = Input.mouse()
+    if mx != 0 and my != 0 and mb == 1:
+        if x - (x2 / 2) * scale < mx < x + (x2 / 2) * scale:
+            if y - (y2 / 2) * scale < my < y + (y2 / 2) * scale:
+                if sound != False:
+                    pygame.mixer.Sound.play(theme.sounds(sound))
+                Input.clicked()
+                return True
+    return False
+
+def hover(renderer, pos, size, input):
+    theme = renderer.theme
+    display, screen, scale = theme.screen_info()
+    sx, sy = screen
+    x, y = pos
+    x, y = sx + x * scale, sy + y * scale
+    x2, y2 = size
+    mx, my, mb = input.mouse()
+    if x - (x2 / 2) * scale < mx < x + (x2 / 2) * scale:
+        if y - (y2 / 2) * scale < my < y + (y2 / 2) * scale:
+            return True
+    return False
+
+def in_window_update(self,window):
+    #self.pos = (self.pos[0] + window.pos[0], self.pos[1] + window.pos[1])
+    #if self.resize:
+    #    scale = (window.size[0] / window.init_size[0], window.size[1] / window.init_size[1])
+    #else:
+    #    scale = (1, 1)
+    if hasattr(self,"change_pos"):
+        self.change_pos((self.init_pos[0] + window.pos[0], self.init_pos[1] + window.pos[1]))
+
 
 class Config:
     def __init__(self):
@@ -216,9 +249,9 @@ class App:
 
         self.Main_window = Layer(self, set_order=0)
         self.Debug_window = Layer(self, set_order=-1)
-        self.Renderer.add_window(self.Main_window)
-        self.Renderer.add_window(self.Debug_window)
+        self.Debug_window.show = False
         self.load_window()
+
 
     def load_window(self):
         if self.config.screen_mode == "Fullscreen":
@@ -253,11 +286,18 @@ class App:
             self.Input.get_input(event,self.frame)
         self.Input.update(self.frame)
 
+        self.Renderer.update_layers()
+
+
+
     def render(self):
         self.display.fill(self.theme.basecolor)
-        self.Renderer.render()
+        self.fps = 1 / (time.perf_counter() - self.p_frame)
+        self.p_frame = time.perf_counter()
+        count = self.Renderer.render()
         pygame.display.update()
         self.frame += 1
+        return count
 
     def Quit(self):
         pygame.quit()
@@ -279,6 +319,7 @@ class Input:
         self.CAPS = False
         self.looked_x = 0
         self.looked_y = 0
+        self.mouse_moved = (0,0)
         self.capture_mouse = False
         self.nubClicks = 0
         self.last_mouse_button = 0
@@ -289,10 +330,8 @@ class Input:
             mx, my = self.mouse_position = event.pos
 
         if event.type == pygame.MOUSEBUTTONDOWN:
-            print(event.button , self.last_mouse_button,self.nubClicks)
             if event.button == self.last_mouse_button:
-                print(time.perf_counter()+0.5,self.last_click)
-                if time.perf_counter()+0.5>self.last_click:
+                if time.perf_counter()<self.last_click+0.5:
                     self.nubClicks+=1
                 else:
                     self.nubClicks = 0
@@ -367,12 +406,13 @@ class Input:
         self.mouse_info = (self.mouse_position[0], self.mouse_position[1], self.mouse_button)
         if self.capture_mouse:
             pygame.mouse.set_visible(False)
-            self.looked_x = self.p_mouse_position[0] - self.mouse_position[0]
-            self.looked_y = self.p_mouse_position[1] - self.mouse_position[1]
-            self.p_mouse_position = self.mouse_position
+
         else:
             pygame.mouse.set_visible(True)
-
+        self.looked_x = self.p_mouse_position[0] - self.mouse_position[0]
+        self.looked_y = self.p_mouse_position[1] - self.mouse_position[1]
+        self.mouse_moved = (self.looked_x, self.looked_y)
+        self.p_mouse_position = self.mouse_position
         ct = time.perf_counter()
         self.keys = []
         for key in self.Keys_pressed:
@@ -396,7 +436,7 @@ class Input:
             self.cursor_state = not self.cursor_state
         return self.cursor_state
 
-    def Keys_pressedraw(self):
+    def keys_pressed_raw(self):
         return self.Keys_pressed
 
     def mouse(self):
@@ -586,23 +626,31 @@ class Theme:
 
 class Renderer:
     def __init__(self):
-        self.windows = []
-        self.base_window = []
+        self.layers = []
 
-    def add_window(self, window):
-        self.windows.append(window)
+    def add_layer(self, layer):
+        self.layers.append(layer)
 
-    def remove_window(self, window):
-        print(self.windows.index(window))
+    def remove_layer(self, layer):
+        self.layers.index(layer)
 
-    def sort_windows(self, window):
-        return window.last_click
+    def sort_layer(self, layer):
+        if layer.last_click == -1:
+            return time.perf_counter()
+        return layer.last_click
+
+    def update_layers(self):
+        self.layers.sort(key=self.sort_layer,reverse=True)
+        for layer in self.layers:
+            layer.update()
 
     def render(self):
-        self.windows.sort(key=self.sort_windows, reverse=True)
-        for window in self.windows:
-            if window.isActive:
-                window.render()
+        self.layers.sort(key=self.sort_layer)
+        count = 0
+        for layer in self.layers:
+            if layer.show:
+                count += layer.render()
+        return count
 
 class Layer:
     def __init__(self,app, set_order= False):
@@ -615,9 +663,10 @@ class Layer:
         self.Input = app.Input
         self.elements = []
         self.last_click = set_order
-        self.isActive = True
+        self.show = True
+        
 
-        self.renderer.add_window(self)
+        self.renderer.add_layer(self)
 
     def add_element(self, element):
         self.elements.append(element)
@@ -631,63 +680,19 @@ class Layer:
 
     def update(self):
         for element in self.elements:
-            element.update(self)
+            if hasattr(element,"update"):
+                element.update()
 
     def render(self):
+        count = 0
         for element in self.elements:
-            if element.isActive:
-                element.render()
-                element.isActive = False
+            element.render()
+            count+=1
+        return count
 
 #elements
 
 class Box:
-    def __init__(self, layer, pos, size, border_color=None, background_color=None, resize=False):
-        self.window = layer
-        self.renderer = layer.renderer
-        self.theme = layer.theme
-        self.display, self.screen, self.scale = self.theme.screen_info()
-        self.tcolor, self.bcolor, self.bgcolor = self.theme.colors()[:-1]
-        if border_color is not None:
-            self.bcolor = border_color
-        if background_color is not None:
-            self.bgcolor = background_color
-
-        self.init_pos = pos
-        self.resize = resize
-        self.isActive = False
-        self.sx, self.sy = self.screen
-        self.px, self.py = self.pos = pos
-        self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
-        self.x2, self.y2 = self.size = size
-        self.x2, self.y2 = self.x2 * self.scale, self.y2 * self.scale
-        self.rect = (self.x - self.x2 / 2, self.y - self.y2 / 2, self.x + self.x2 / 2, self.y + self.y2 / 2)
-        self.window.add_element(self)
-    def update(self, window):
-        self.pos = (self.init_pos[0] + window.pos[0], self.init_pos[1] + window.pos[1])
-        if self.resize:
-            scale = (window.size[0] / window.init_size[0], window.size[1] / window.init_size[1])
-        else:
-            scale = (1, 1)
-
-        self.px, self.py = self.pos
-        self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
-        self.x2, self.y2 = self.size
-        self.x2, self.y2 = self.x2 * self.scale * scale[0], self.y2 * self.scale * scale[1]
-    def change_pos(self, pos):
-        self.px, self.py = self.pos = pos
-        self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
-        self.x2, self.y2 = self.size
-        self.x2, self.y2 = self.x2 * self.scale, self.y2 * self.scale
-        self.rect = (self.x - self.x2 / 2, self.y - self.y2 / 2, self.x + self.x2 / 2, self.y + self.y2 / 2)
-
-    def render(self):
-        pygame.draw.rect(self.display, self.bcolor, (self.x - self.x2 / 2, self.y - self.y2 / 2, self.x2, self.y2))
-        pygame.draw.rect(self.display, self.bgcolor, ((self.x - self.x2 / 2) + self.theme.border,
-                                                      (self.y - self.y2 / 2) + self.theme.border,
-                                                      self.x2 - self.theme.border * 2, self.y2 - self.theme.border * 2))
-
-class RoundBox:
     def __init__(self, layer, pos, size, radius=None, border_color=None, background_color=None, resize=False):
         self.window = layer
         self.renderer = layer.renderer
@@ -704,9 +709,8 @@ class RoundBox:
             self.radius = radius
         else:
             self.radius = self.theme.radius
-        self.radius = radius
         self.resize = False
-        self.isActive = False
+        
         self.sx, self.sy = self.screen
         self.px, self.py = self.pos = pos
         self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
@@ -714,17 +718,18 @@ class RoundBox:
         self.x2, self.y2 = self.x2 * self.scale, self.y2 * self.scale
         self.rect = (self.x - self.x2 / 2, self.y - self.y2 / 2, self.x + self.x2 / 2, self.y + self.y2 / 2)
         self.window.add_element(self)
-    def update(self, window):
-        self.pos = (self.init_pos[0] + window.pos[0], self.init_pos[1] + window.pos[1])
-        if self.resize:
-            scale = (window.size[0] / window.init_size[0], window.size[1] / window.init_size[1])
-        else:
-            scale = (1, 1)
+    def update(self, window = None):
+        if window is not None:
+            self.pos = (self.init_pos[0] + window.pos[0], self.init_pos[1] + window.pos[1])
+            if self.resize:
+                scale = (window.size[0] / window.init_size[0], window.size[1] / window.init_size[1])
+            else:
+                scale = (1, 1)
 
-        self.px, self.py = self.pos
-        self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
-        self.x2, self.y2 = self.size
-        self.x2, self.y2 = self.x2 * self.scale * scale[0], self.y2 * self.scale * scale[1]
+            self.px, self.py = self.pos
+            self.x, self.y = self.sx + self.px * self.scale, self.sy + self.py * self.scale
+            self.x2, self.y2 = self.size
+            self.x2, self.y2 = self.x2 * self.scale * scale[0], self.y2 * self.scale * scale[1]
 
     def change_pos(self, pos):
         self.px, self.py = self.pos = pos
@@ -734,73 +739,53 @@ class RoundBox:
         self.rect = (self.x - self.x2 / 2, self.y - self.y2 / 2, self.x + self.x2 / 2, self.y + self.y2 / 2)
 
     def render(self):
-        radius = self.radius * self.scale
-        pygame.draw.circle(self.display, self.bcolor,(self.x - self.x2 / 2 + radius, self.y - self.y2 / 2 + radius),radius)
-        pygame.draw.circle(self.display, self.bcolor, (self.x - self.x2 / 2 + radius, self.y + self.y2 / 2 - radius),radius)
-        pygame.draw.circle(self.display, self.bcolor, (self.x + self.x2 / 2 - radius, self.y - self.y2 / 2 + radius),radius)
-        pygame.draw.circle(self.display, self.bcolor, (self.x + self.x2 / 2 - radius, self.y + self.y2 / 2 - radius),radius)
-        pygame.draw.rect(self.display, self.bcolor, (self.x - self.x2 / 2 + radius, self.y - self.y2 / 2, self.x2 - radius*2, self.y2))
-        pygame.draw.rect(self.display, self.bcolor, (self.x - self.x2 / 2, self.y - self.y2 / 2 + radius, self.x2, self.y2 - radius*2))
-        border = self.theme.border*self.scale
-        pygame.draw.circle(self.display, self.bgcolor,(self.x - self.x2 / 2 + radius, self.y - self.y2 / 2 + radius),radius-border)
-        pygame.draw.circle(self.display, self.bgcolor, (self.x - self.x2 / 2 + radius, self.y + self.y2 / 2 - radius),radius-border)
-        pygame.draw.circle(self.display, self.bgcolor, (self.x + self.x2 / 2 - radius, self.y - self.y2 / 2 + radius),radius-border)
-        pygame.draw.circle(self.display, self.bgcolor, (self.x + self.x2 / 2 - radius, self.y + self.y2 / 2 - radius),radius-border)
-        pygame.draw.rect(self.display, self.bgcolor, ((self.x - self.x2 / 2) + radius,(self.y - self.y2 / 2) + border, self.x2 - radius * 2 , self.y2 - border * 2))
-        pygame.draw.rect(self.display, self.bgcolor, ((self.x - self.x2 / 2) + border,(self.y - self.y2 / 2) + radius, self.x2 - border * 2, self.y2 -  radius * 2))
+        if self.radius is not None:
+            radius = self.radius * self.scale
+            pygame.draw.circle(self.display, self.bcolor,(self.x - self.x2 / 2 + radius, self.y - self.y2 / 2 + radius),radius)
+            pygame.draw.circle(self.display, self.bcolor, (self.x - self.x2 / 2 + radius, self.y + self.y2 / 2 - radius),radius)
+            pygame.draw.circle(self.display, self.bcolor, (self.x + self.x2 / 2 - radius, self.y - self.y2 / 2 + radius),radius)
+            pygame.draw.circle(self.display, self.bcolor, (self.x + self.x2 / 2 - radius, self.y + self.y2 / 2 - radius),radius)
+            pygame.draw.rect(self.display, self.bcolor, (self.x - self.x2 / 2 + radius, self.y - self.y2 / 2, self.x2 - radius*2, self.y2))
+            pygame.draw.rect(self.display, self.bcolor, (self.x - self.x2 / 2, self.y - self.y2 / 2 + radius, self.x2, self.y2 - radius*2))
+            border = self.theme.border*self.scale
+            pygame.draw.circle(self.display, self.bgcolor,(self.x - self.x2 / 2 + radius, self.y - self.y2 / 2 + radius),radius-border)
+            pygame.draw.circle(self.display, self.bgcolor, (self.x - self.x2 / 2 + radius, self.y + self.y2 / 2 - radius),radius-border)
+            pygame.draw.circle(self.display, self.bgcolor, (self.x + self.x2 / 2 - radius, self.y - self.y2 / 2 + radius),radius-border)
+            pygame.draw.circle(self.display, self.bgcolor, (self.x + self.x2 / 2 - radius, self.y + self.y2 / 2 - radius),radius-border)
+            pygame.draw.rect(self.display, self.bgcolor, ((self.x - self.x2 / 2) + radius,(self.y - self.y2 / 2) + border, self.x2 - radius * 2 , self.y2 - border * 2))
+            pygame.draw.rect(self.display, self.bgcolor, ((self.x - self.x2 / 2) + border,(self.y - self.y2 / 2) + radius, self.x2 - border * 2, self.y2 -  radius * 2))
+        else:
+            pygame.draw.rect(self.display, self.bcolor, (self.x - self.x2 / 2, self.y - self.y2 / 2, self.x2, self.y2))
+            pygame.draw.rect(self.display, self.bgcolor, ((self.x - self.x2 / 2) + self.theme.border,
+                                                          (self.y - self.y2 / 2) + self.theme.border,self.x2 - self.theme.border * 2,self.y2 - self.theme.border * 2))
 
 class Text:
-    def __init__(self, layer, pos, text, in_box=None, radius=None, size=(0, 0), text_color=None,
-                 border_color=None, background_color=None, center="center",
+    def __init__(self, layer, pos, text,size=(0,0), tcolor=None,center="center",
                  cut_dir=None, resize=None,padding=None):
         self.render_window = layer
         self.renderer = layer.renderer
         self.theme = theme = layer.theme
         self.pos = pos
-        self.in_box = in_box
+        self.init_pos = pos
         self.resize = resize
         self.display, self.screen, self.scale = theme.screen_info()
-        self.tcolor, self.bcolor, self.bgcolor = theme.colors()[:-1]
-        self.radius = self.theme.radius
+        self.tcolor = theme.colors()[0]
         self.padding = theme.border + theme.scale*2
         self.font = theme.font
         self.center = center
         self.cut_dir = cut_dir
-        self.isActive = False
+        self.size = size
+        
 
-        if text_color is not None:
-            self.tcolor = text_color
-        if border_color is not None:
-            self.bcolor = border_color
-        if background_color is not None:
-            self.bgcolor = background_color
+        if tcolor is not None:
+            self.tcolor = tcolor
         if padding is not None:
             self.padding = padding
-        if radius is not None:
-            self.radius = radius
 
-        self.size = size
         sx, sy = self.screen
         x, y = self.pos
         self.x, self.y = sx + x * self.scale, sy + y * self.scale
-        self.init_pos = (self.x, self.y)
         tx, ty = self.font.size(str(text))
-
-
-        if in_box:
-            print(self.radius)
-            if self.radius is not None:
-                self.box = RoundBox(self.render_window, self.pos, self.size, self.radius, self.bcolor, self.bgcolor, resize=self.resize)
-            else:
-                self.box = Box(self.render_window, self.pos, self.size, self.bcolor, self.bgcolor, resize=self.resize)
-            while tx > size[0] * self.scale-self.padding*2:
-                if cut_dir:
-                    text = text[1:]
-                else:
-                    text = text[:-1]
-                tx = self.font.size(str(text))[0]
-
-
 
         self.text = text
         self.text_pos = (tx, ty)
@@ -814,78 +799,48 @@ class Text:
 
         self.render_window.add_element(self)
 
-
-    def update(self, window):
-
-        if self.resize:
-            scale = (window.size[0] / window.init_size[0], window.size[1] / window.init_size[1])
-        else:
-            scale = (1, 1)
-
-        if self.in_box and window:
-            self.box.update(window)
-        #print(scale)
-
-        self.x, self.y = (self.init_pos[0] * scale[0] + window.pos[0] * self.scale,
-                          self.init_pos[1] * scale[1] + window.pos[1] * self.scale)
-
-
     def change_text(self,text):
         tx, ty = self.font.size(str(text))
-
-        if self.in_box:
-            while tx > self.size[0] * self.scale-self.padding*2:
-                if self.cut_dir:
-                    text = text[1:]
-                else:
-                    text = text[:-1]
-                tx = self.font.size(str(text))[0]
-
         self.text = text
         self.text_pos = (tx, ty)
         self.tx, self.ty = tx, ty
         self.text_text = self.font.render(str(text), True, self.tcolor)
 
     def change_pos(self,new_pos):
-        self.box.change_pos(new_pos)
         sx, sy = self.screen
         x, y = new_pos
         self.x, self.y = sx + x * self.scale, sy + y * self.scale
-        self.init_pos = (self.x, self.y)
-    def render(self, func = None):
-        if self.in_box:
-            self.box.render()
+        self.pos = (self.x, self.y)
+        
+    def render(self):
         self.textStartPos = get_center(self.center, self.scale,
                    (self.x - self.tx / 2 + self.padding, self.y - self.ty / 2),
                    self.tx, self.ty, self.size)
         self.textEndPos = (self.textStartPos[0]+self.font.size(self.text)[0],self.textStartPos[1]+self.font.size(self.text)[1])
-
-        if func is not None:
-            func()
-
         self.display.blit(self.text_text,self.textStartPos)
 
 class TextBox:
-    def __init__(self, render_window ,Input, pos, size, text, text_center="center", center="center",
-                 in_box=True, default_text="", resizeable=False, maxTextLength=False, window=None, radius=False, padding=False):
-        self.render_window = render_window
-        self.Input = Input
-        self.renderer = render_window.renderer
-        self.theme = theme = render_window.theme
-        self.tcolor, self.bcolor, self.bgcolor = theme.colors()[:-1]
-        self.sound = theme.sounds("button")
-        self.screen_info = theme.screen_info()
+    def __init__(self, app, layer, pos, size, text, text_center="center", center="center",
+                 in_box=True, default_text="", resizeable=False, maxTextLength=False, radius=None, padding=False):
+        self.app = app
+        self.layer = layer
+        self.renderer = app.Renderer
+        self.theme = app.theme
+        self.display = app.theme.display
+        self.screen = app.theme.screen
+        self.scale = app.theme.scale
+        self.Input = app.Input
+        self.tcolor, self.bcolor, self.bgcolor = self.theme.colors()[:-1]
+        self.sound = self.theme.sounds("button")
+        self.screen_info = self.theme.screen_info()
         self.display, self.screen, self.scale = self.screen_info
         self.in_text = False
         self.default_text = default_text
         self.text = str(text)
-        self.start_pos = pos
-        if window is not None:
-            self.pos = window.pos[0] + pos[0], window.pos[1] + pos[1]
-        else:
-            self.pos = pos
+        self.pos = pos
+        self.init_pos = pos
         self.size = size
-        self.font = theme.font
+        self.font = self.theme.font
         self.pointer = len(text)
         self.highLightStart = 0
         self.highLightEnd = 0
@@ -897,20 +852,21 @@ class TextBox:
         self.text_center = text_center
         self.resizeable = resizeable
         self.maxTextLength = maxTextLength
-        self.window = window
-        self.padding = theme.border + theme.scale*2
+        self.padding = self.theme.border + self.theme.scale*2
         if padding:
             self.padding = padding
-        self.isActive = False
         self.cursor = ((0, 0), (0, 0))
-        self.guiText = Text(self.render_window, pos, text, self.in_box, radius=self.radius,
-             size=self.size, background_color=self.bgcolor,center=self.text_center,padding=self.padding)
-        self.render_window.add_element(self)
+
+        self.elements = []
+
+        self.box = Box(self, pos, self.size,self.radius)
+        self.guiText = Text(self, pos, text,size=self.size,center=self.text_center,padding=self.padding)
+        self.layer.add_element(self)
+
+    def add_element(self,element):
+        self.elements.append(element)
 
     def update(self):
-        if self.window is not None:
-            self.pos = self.window.pos[0] + self.start_pos[0], self.window.pos[1] + self.start_pos[1]
-
         sound = self.sound
         sx, sy = self.screen
         x, y = self.pos
@@ -949,7 +905,7 @@ class TextBox:
                 if self.text == "":
                     self.text = self.default_text
                 self.highLighting = False
-        self.guiText.box.bgcolor = bgcolor
+        self.box.bgcolor = bgcolor
         if self.in_text:
             # split text at cursor
             if self.pointer == 0:
@@ -1116,6 +1072,14 @@ class TextBox:
         self.guiText.change_text(text)
         return str(p_text)
 
+    def change_pos(self,pos):
+        for element in self.elements:
+            in_window_update(element,self)
+        sx, sy = self.screen
+        x, y = pos
+        self.x, self.y = sx + x * self.scale, sy + y * self.scale
+        self.pos = (self.x, self.y)
+
     def highlight(self):
         if self.highLighting and self.highLightStart != self.highLightEnd:
             thickness = self.font.size(self.text)[1]
@@ -1125,47 +1089,50 @@ class TextBox:
             pygame.draw.line(self.display, (33, 66, 131), (startx,y), (endx,y), thickness)
 
     def render(self):
-        self.guiText.render(self.highlight)
+        count = 0
+        for element in self.elements:
+            element.render()
+            count+=1
         start,end = self.cursor
         if self.Input.cursor() and self.in_text:
             pygame.draw.line(self.display, self.tcolor, start,end,
                              self.scale)
+        return count
 
 class Button:
-    def __init__(self, render_window, Input, pos, size, text, text_center="center", center="center", resizeable=False, window=None, radius=False, padding=False):
-        self.render_window = render_window
-        self.Input = Input
-        self.renderer = render_window.renderer
-        self.theme = theme = render_window.theme
-        self.tcolor, self.bcolor, self.bgcolor = theme.colors()[:-1]
-        self.sound = theme.sounds("button")
-        self.screen_info = theme.screen_info()
-        self.display, self.screen, self.scale = self.screen_info
+    def __init__(self, app,layer, pos, size, text, text_center="center", center="center", resizeable=False, radius=None, padding=False):
+        self.app = app
+        self.layer = layer
+        self.renderer = app.Renderer
+        self.theme = app.theme
+        self.display = app.theme.display
+        self.screen = app.theme.screen
+        self.scale = app.theme.scale
+        self.Input = app.Input
+        self.tcolor, self.bcolor, self.bgcolor = self.theme.colors()[:-1]
+        self.sound = self.theme.sounds("button")
+        self.screen_info = self.theme.screen_info()
         self.text = str(text)
-        self.start_pos = pos
-        if window is not None:
-            self.pos = window.pos[0] + pos[0], window.pos[1] + pos[1]
-        else:
-            self.pos = pos
+        self.init_pos = pos
+        self.pos = pos
         self.size = size
-        self.font = theme.font
+        self.font = self.theme.font
         self.radius = radius
         self.center = center
         self.text_center = text_center
         self.resizeable = resizeable
-        self.window = window
-        self.padding = theme.border + theme.scale*2
+        self.padding = self.theme.border + self.theme.scale*2
         if padding:
             self.padding = padding
-        self.isActive = False
-        self.guiText = Text(self.render_window, pos, text, in_box=True, radius=self.radius,
-             size=self.size, background_color=self.bgcolor,center=self.text_center,padding=self.padding)
-        self.render_window.add_element(self)
+        self.elements = []
+        self.box = Box(self, pos, self.size, self.radius)
+        self.guiText = Text(self, pos, text, size=self.size,center=self.text_center,padding=self.padding)
+        self.layer.add_element(self)
 
+    def add_element(self,element):
+        self.elements.append(element)
+        
     def update(self):
-        if self.window is not None:
-            self.pos = self.window.pos[0] + self.start_pos[0], self.window.pos[1] + self.start_pos[1]
-        self.isActive = True
         sound = self.sound
         sx, sy = self.screen
         x, y = self.pos
@@ -1189,13 +1156,13 @@ class Button:
             else:
                 b -= 16
             bgcolor = (r, g, b)
-            self.guiText.box.bgcolor = bgcolor
+            self.box.bgcolor = bgcolor
             if mb == 1:
                 self.Input.clicked()
                 if sound != False:
                     pygame.mixer.Sound.play(sound)
                 return True
-        self.guiText.box.bgcolor = bgcolor
+        self.box.bgcolor = bgcolor
         return False
 
     def onClick(self, func, args):
@@ -1203,40 +1170,73 @@ class Button:
             func(*[args])
 
     def render(self):
-        self.guiText.render()
+        count = 0
+        for element in self.elements:
+            element.render()
+            count+=1
+        return count
 
 class DisplayWindow:
-    def __init__(self, layer, pos, size, bcolor=None, bgcolor=None, resize=False, rounded=False, radius=None):
+    def __init__(self, app, layer, pos, size, name=None, in_box=True, center="center", tcolor=None
+                         , bcolor=None, bgcolor=None, resize=False, radius=None):
+        self.app = app
         self.layer = layer
-        self.theme = theme = self.renderer.theme
-        self.display = theme.display
-        self.screen = theme.screen
-        self.scale = theme.scale
+        self.renderer = app.Renderer
+        self.theme = app.theme
+        self.display = app.theme.display
+        self.screen = app.theme.screen
+        self.scale = app.theme.scale
+        self.Input = app.Input
+        self.elements = []
+        self.last_click = time.perf_counter()
+        self.show = True
         self.pos = pos
         self.size = size
         self.radius = radius
-        self.rounded = rounded
         self.bcolor = bcolor
         self.bgcolor = bgcolor
         self.resize = resize
-        self.isActive = False
-        if radius is not None or rounded:
-            self.box = RoundBox(layer, pos, size, radius, bcolor, bgcolor, resize)
-        else:
-            self.box = Box(layer, pos, size, bcolor, bgcolor, resize)
-        self.elements = [self.box]
-        layer.add_element(self)
+        self.resizing = False
+        self.moving = False
+        self.in_box = in_box
+        self.box = Box(self, pos, size, radius, bcolor, bgcolor, resize)
+        if name is not None:
+            self.name = Text(self, (pos[0],pos[1]-size[1]/2+10), name,True,(size[0],20), center=center, tcolor=tcolor
+                        , bcolor=bcolor, bgcolor=bgcolor, resize=resize, radius=radius)
+
+        self.renderer.add_layer(self)
 
     def update(self):
-        sx, sy = self.screen
-        x, y = self.pos
-        x, y = sx + x * self.scale, sy + y * self.scale
-        size_x, size_y = self.size
-        x2, y2 = size_x * self.scale, size_y * self.scale
-        x = x - x2 / 2
-        y = y - y2 / 2
-        self.box.change_pos((x,y))
-        self.isActive = True
+        for element in self.elements:
+            if hasattr(element,"update"):
+                element.update()
+        if self.moving and self.Input.mouse_button == -1:
+            self.last_click = time.perf_counter()
+            self.pos = (self.pos[0]-self.Input.looked_x/self.scale,self.pos[1]-self.Input.looked_y/self.scale)
+        else:
+            self.moving = False
+            
+        if hover(self,self.pos,self.size,self.Input):
+            if hover(self,(self.pos[0],self.pos[1]-self.size[1]/2+10), (self.size[0],20),self.Input):
+                if self.Input.mouse_button == 1:
+                    self.last_click = time.perf_counter()
+                    self.Input.clicked()
+                    self.moving = True
+                if self.Input.mouse_button == -1:
+                    self.last_click = time.perf_counter()
+                    self.pos = (self.pos[0]-self.Input.looked_x/self.scale,self.pos[1]-self.Input.looked_y/self.scale)
+
+
+
+
+
+
+            if 0 < self.Input.mouse_button:
+                self.last_click = time.perf_counter()
+                self.Input.clicked()
+
+        for element in self.elements:
+            in_window_update(element,self)
 
     def add_element(self, element):
         self.elements.append(element)
@@ -1246,7 +1246,8 @@ class DisplayWindow:
         self.elements.pop(element)
 
     def render(self):
+        count = 0
         for element in self.elements:
-            if element.isActive:
-                element.render()
-                element.isActive = False
+            element.render()
+            count+=1
+        return count

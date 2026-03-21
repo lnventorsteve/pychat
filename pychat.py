@@ -1,12 +1,9 @@
 import os.path
 import subprocess
+import traceback
+
 import Network as N
 import my_gui_2 as gui
-from my_gui_2 import active
-
-
-def sumfunc(text):
-    print(text)
 
 
 if __name__ == "__main__":
@@ -16,11 +13,20 @@ if __name__ == "__main__":
     main_screen = ["main_menu"]
     sub_screen = ["main"]
     n = N.Network()
-    text = gui.Text(main_window,(0,0),"hello world!",in_box=True,size=(200,20))
-    text2 = gui.Text(main_window, (app.screen[0]/app.config.scale-50,app.screen[1]/app.config.scale-10 ), "Hey Djo!", in_box=True, size=(100, 20))
-    textbox = gui.TextBox(main_window,app.Input, (0,50),(200,20),"",text_center="left",default_text="enter text here")
-    button1 = gui.Button(main_window,app.Input,(0,-50),(200,20),"Press me!")
+    text = gui.Text(main_window,(0,0),"hello world!",(200,20))
+    text2 = gui.Text(main_window, (app.screen[0]/app.config.scale-50,app.screen[1]/app.config.scale-10 ), "Hey Djo!",(100, 20))
+    textbox = gui.TextBox(app,main_window, (0,50),(200,20),"",text_center="left",default_text="enter text here")
+    button1 = gui.Button(app,main_window,(0,-50),(200,20),"Press me!")
 
+    #debug
+    fps_ui = gui.Text(debug_window, (-app.config.current_w / (2 * app.config.scale)
+                                              , -app.config.current_h / (2 * app.config.scale) + 10), "fps:", center="left")
+    keys_pressed = gui.Text(debug_window, (-app.config.current_w / (2 * app.config.scale)
+                                              , -app.config.current_h / (2 * app.config.scale) + 30), "keys:", center="left" )
+    mouse_info = gui.Text(debug_window, (-app.config.current_w / (2 * app.config.scale)
+                                              , -app.config.current_h / (2 * app.config.scale) + 50), "Mouse Info:",center="left")
+    active_elements = gui.Text(debug_window, (-app.config.current_w / (2 * app.config.scale)
+                                              , -app.config.current_h / (2 * app.config.scale) + 70), "Active Elements:", center="left" )
 
     userLogin = False
     sent = False
@@ -28,6 +34,15 @@ if __name__ == "__main__":
     while not app.quit:
         app.update()
         try:
+            for key in app.Input.keys:
+                if key == 1073741884:
+                    if not debug_window.show:
+                        debug_window.show = True
+                    else:
+                        debug_window.show = False
+
+
+
             #print(main_screen[-1],sub_screen[-1])
             match main_screen[-1]:
                 case "load_user":
@@ -38,20 +53,21 @@ if __name__ == "__main__":
                                     userId = f.readline().split(",")[1]
                                     userPw = f.readline().split(",")[1]
                             else:
-                                with open("user.txt", "w") as f:
-                                    f.writelines("userId,None\n,userPw,None\n")
+                                #with open("user.txt", "w") as f:
+                                #    f.writelines("userId,None\n,userPw,None\n")
+
+                                loginWindow = gui.DisplayWindow(app, main_window,(0,0), (200,200),"Login")
+                                user_name = gui.TextBox(app,loginWindow, (0,0),(180,20),"",text_center="left")
+
                                 main_screen = ["login"]
-                                loginWindow = gui.DisplayWindow(main_window,(0,0), (200,200))
 
                             text.change_text("Connecting...")
-                            active(text)
                             if not n.is_connected():
                                 n.connect()
                             else:
                                 text.change_text("Checking user ID...")
                                 sub_screen = ["login"]
                         case "login":
-                            active(text)
                             if not sent:
                                 n.send({"packet": "checkId","userId": userId})
                                 sent = True
@@ -65,7 +81,6 @@ if __name__ == "__main__":
                                     text.change_text("Bad ID")
                                     main_screen = ["login"]
                         case "password":
-                            active(text)
                             if not sent:
                                 n.send({"packet": "userLogin", "userPw": userPw})
                                 sent = True
@@ -77,22 +92,25 @@ if __name__ == "__main__":
                                     sub_screen = ["main"]
                                     main_screen = ["main_menu"]
                 case "login":
-                    loginWindow.update()
-
+                    pass
 
 
     
                 case "main_menu":
                     if not userLogin:
                         main_screen = ["load_user"]
-                    main_screen = ["login"]
+                    #main_screen = ["login"]
 
                 case _:
                     pass
 
-            app.render()
-        except:
-            pass
+            fps_ui.change_text(f"FPS:{app.fps}")
+            keys_pressed.change_text(f"Keys:{app.Input.keys_pressed_raw()}")
+            mouse_info.change_text(f"Mouse Info:{app.Input.mouse_info}")
+            active_elements.change_text(f"Active Elements:{app.render()}")
+
+        except Exception as e:
+            traceback.print_exc()
 
     app.Quit()
     print("done")
